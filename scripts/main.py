@@ -1,85 +1,52 @@
 """
-Gold Price Scraper with multi-source fallback.
-Tries each source in order until one returns data successfully.
+Gold Price Scraper — fetches today, 7 days ago, and 1 year ago in one run.
+Writes a single YYYYMMDD_gold_prices.json with prices and comparisons.
 """
-
 import json
-from datetime import datetime
+import sys
+from datetime import date, datetime, timedelta
 
-import requests
-
-from parsers import (
-    HEADERS,
-    normalize_prices,
-    parse_cafef,
-    parse_sjc,
-    parse_generic,
-)
+from compare import build_comparison
+from fetcher import fetch_for_date, one_year_ago
+from schemas import GoldPriceReport, Snapshot
 
 
-def fetch_html(url: str) -> str:
-    response = requests.get(url, headers=HEADERS, timeout=30)
-    response.raise_for_status()
-    return response.text
+def make_snapshot(d: date) -> Snapshot:
+    prices, source = fetch_for_date(d)
+    return {"date": d.strftime("%Y-%m-%d"), "source": source, "prices": prices}
 
 
-SOURCES = [
-    ("https://cafef.vn/du-lieu/gia-vang-hom-nay/trong-nuoc.chn", parse_cafef),
-    ("https://sjc.com.vn/gia-vang-online",                        parse_sjc),
-    ("https://www.pnj.com.vn/site/gia-vang",                      parse_generic),
-    ("https://doji.vn/gia-vang",                                   parse_generic),
-    ("https://webgia.com/gia-vang/sjc/",                           parse_generic),
-    ("https://simplize.vn/gia-vang",                               parse_generic),
-    ("https://baomoi.com/tien-ich-gia-vang.epi",                   parse_generic),
-    ("https://www.24h.com.vn/gia-vang-hom-nay-c425.html",         parse_generic),
-    ("https://giavang.org",                                        parse_generic),
-    ("https://vneconomy.vn/gia-vang.htm",                          parse_generic),
-]
-
-
-def fetch_with_fallback() -> tuple[list[dict], str]:
-    """Try each source in order; return (prices, source_url) on first success."""
-    last_error = None
-    for url, parser in SOURCES:
-        print(f"Trying {url} ...")
-        try:
-            html = fetch_html(url)
-            prices = parser(html)
-            if prices:
-                print(f"  -> Got {len(prices)} entries")
-                return prices, url
-            print("  -> Parsed OK but no prices found, trying next source")
-        except requests.RequestException as e:
-            last_error = e
-            print(f"  -> Request failed: {e}, trying next source")
-
-    raise RuntimeError(f"All sources exhausted. Last error: {last_error}")
-
-
-def save_to_json(prices: list[dict], source_url: str, filename: str = "gold_prices.json") -> None:
-    output = {
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "source": source_url,
-        "prices": prices,
-    }
+def save_to_json(report: GoldPriceReport, filename: str) -> None:
     with open(filename, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
-    print(f"Saved {len(prices)} price records to {filename}")
+        json.dump(report, f, ensure_ascii=False, indent=2)
+    print(f"Saved report to {filename}")
 
 
-def main():
-    try:
-        prices, source_url = fetch_with_fallback()
-        prices = normalize_prices(prices)
-    except RuntimeError as e:
-        print(f"Error: {e}")
-        return
+def main() -> None:
+    today = date.today()
+    d7 = today - timedelta(days=7)
+    d1y = one_year_ago(today)
 
-    print(f"\nSource: {source_url}")
-    print(f"Found {len(prices)} gold price entries")
+    print(f"Fetching prices for: today={today}, 7d_ago={d7}, 1y_ago={d1y}")
 
-    filename = datetime.now().strftime("%Y%m%d") + "_gold_prices.json"
-    save_to_json(prices, source_url, filename)
+    today_snap = make_snapshot(today)
+    d7_snap = make_snapshot(d7)
+    d1y_snap = make_snapshot(d1y)
+
+    comparison = build_comparison(today_snap, d7_snap, d1y_snap)
+
+    report: GoldPriceReport = {
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "snapshots": {"today": today_snap, "7d_ago": d7_snap, "1y_ago": d1y_snap},
+        "comparison": comparison,
+    }
+
+    filename = today.strftime("%Y%m%d") + "_gold_prices.json"
+    save_to_json(report, filename)
+
+    if today_snap["prices"] is None:
+        print("Error: today's fetch failed — no prices retrieved from any source")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
