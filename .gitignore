@@ -1,0 +1,4 @@
+.venv/
+*_gold_prices.json
+**/superpowers/
+**/__pycache__/
