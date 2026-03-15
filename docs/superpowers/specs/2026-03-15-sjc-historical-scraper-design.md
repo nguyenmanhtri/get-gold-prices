@@ -37,14 +37,16 @@ GET https://api.simplize.vn/api/historical/prices/chart
 
 Each row is a monthly candle. Prices are in VND per lượng (1 lượng = 37.5g).
 
+The `data` array for a ring ticker that has no historical data will be an empty list `[]` — not an error.
+
 ---
 
 ## Tickers
 
-| Ticker          | Description              | Data availability |
-|-----------------|--------------------------|-------------------|
-| `SJC:M1L:BUY`  | SJC bar 1 lượng — buy    | Jan 2012 – present |
-| `SJC:M1L:SELL` | SJC bar 1 lượng — sell   | Jan 2012 – present |
+| Ticker           | Description             | Data availability  |
+|------------------|-------------------------|--------------------|
+| `SJC:M1L:BUY`   | SJC bar 1 lượng — buy   | Jan 2012 – present |
+| `SJC:M1L:SELL`  | SJC bar 1 lượng — sell  | Jan 2012 – present |
 | `SJC:T9999:BUY` | SJC ring 99.99 — buy    | Mar 2024 – present |
 | `SJC:T9999:SELL`| SJC ring 99.99 — sell   | Mar 2024 – present |
 
@@ -54,31 +56,39 @@ Each row is a monthly candle. Prices are in VND per lượng (1 lượng = 37.5g
 
 **File:** `get-gold-prices/scripts/scrape_history.py`
 
+**Working directory:** the script must be run from the repo root (`my-openclaw-skills/`). The output path is resolved relative to `__file__` so the cwd does not matter in practice — see Output section below.
+
 **Steps:**
-1. Fetch all four tickers with `period=all`
-2. For each response, extract `[timestamp, close]` from each row (index 0 and 4)
-3. Convert Unix timestamp → `YYYY-MM-DD` date string
-4. Merge into a single dict keyed by date
-5. Write to CSV with columns: `date, sjc_bar_buy, sjc_bar_sell, sjc_ring_buy, sjc_ring_sell`
-6. Print a summary: number of rows per ticker, date range, output path
+1. Fetch all four tickers with `period=all`. For each ticker:
+   a. Call `requests.get(url, headers=..., timeout=30)`.
+   b. Call `response.raise_for_status()` to catch HTTP-level errors (4xx/5xx).
+   c. Parse the JSON body and check `body["status"] == 200`; if not, raise a `RuntimeError` with the message field.
+   d. If `body["data"]` is an empty list, log a warning (`"No data for ticker <X>"`) and continue — this is expected for ring tickers if the API returns nothing.
+2. For each non-empty data row `[ts, open, high, low, close, _]`, extract `(ts, close)`. Index 4 is the close price.
+3. Convert each Unix timestamp to a `YYYY-MM-DD` date string in **UTC+7 (Asia/Ho_Chi_Minh)** timezone using `datetime.fromtimestamp(ts, tz=ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%Y-%m-%d")`.
+4. Accumulate into a single `dict[date_str, dict]` where each inner dict holds the four column values for that month. For each ticker, set only its own column; leave the others untouched so they remain `None`.
+5. Sort all dates ascending.
+6. Write to CSV with columns: `date, sjc_bar_buy, sjc_bar_sell, sjc_ring_buy, sjc_ring_sell`. Empty cells (missing ring data before Mar 2024) are written as blank strings.
+7. Print a summary to stdout: row count per ticker, full date range in the output, output file path.
 
-**Output file:** `get-gold-prices/scripts/gold_history.csv`
+**Output file:** resolved relative to `__file__` as `Path(__file__).parent / "gold_history.csv"` → `get-gold-prices/scripts/gold_history.csv`.
 
-Ring columns are empty (blank) for dates before Mar 2024 — no backfill or interpolation.
+Ring columns are blank for dates before Mar 2024 — no backfill or interpolation.
 
 ---
 
 ## Error handling
 
-- Non-200 HTTP responses raise an exception with the status code
-- Empty `data` array logs a warning but doesn't abort (ring may have less data)
-- No retry logic — the API is reliable; if it fails, re-run the script
+- HTTP-level errors (4xx/5xx): `raise_for_status()` raises `requests.HTTPError`; let it propagate.
+- API-level errors (HTTP 200 but `body["status"] != 200`): raise `RuntimeError(body["message"])`.
+- Empty `data` array: log a warning and skip — not a fatal error (expected for ring tickers with limited history).
+- No retry logic — the API is reliable; re-run the script on failure.
 
 ---
 
 ## Dependencies
 
-No new dependencies. Uses `requests` already declared in `requirements.txt`.
+No new dependencies. Uses `requests` already declared in `requirements.txt`. Uses `zoneinfo` (stdlib, Python 3.9+) for timezone conversion.
 
 ---
 
@@ -89,6 +99,8 @@ source ~/.local/share/get-gold-prices-skill-venv/bin/activate
 python get-gold-prices/scripts/scrape_history.py
 deactivate
 ```
+
+Output is written to `get-gold-prices/scripts/gold_history.csv` regardless of working directory.
 
 ---
 
