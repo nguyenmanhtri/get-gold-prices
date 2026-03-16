@@ -1,5 +1,6 @@
 # get-gold-prices/scripts/test_scrape_history.py
 import io
+import pytest
 from unittest.mock import patch, Mock
 from scrape_history import fetch_ticker, merge_tickers, write_csv
 
@@ -26,7 +27,6 @@ def test_fetch_ticker_empty_data_returns_empty_list():
 
 
 def test_fetch_ticker_raises_on_api_error():
-    import pytest
     m = Mock()
     m.raise_for_status.return_value = None
     m.json.return_value = {"status": 500, "message": "Có lỗi xảy ra"}
