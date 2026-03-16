@@ -4,27 +4,24 @@ and write a dated CSV covering 2025–2026.
 """
 import csv
 from datetime import datetime, timezone
+from pathlib import Path
 
 import requests
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-}
+from constants import CSV_COLUMNS, HEADERS, HISTORY_CHART_URL, TICKERS
 
-TICKERS = {
-    "vang_mieng_sjc_buy":  "BTMC:BVV9999:BUY",
-    "vang_mieng_sjc_sell": "BTMC:BVV9999:SELL",
-    "vang_9999_24k_buy":   "BTMC:RTL9999:BUY",
-    "vang_9999_24k_sell":  "BTMC:RTL9999:SELL",
-}
 
-CSV_COLUMNS = ["date", "vang_mieng_sjc_buy", "vang_mieng_sjc_sell", "vang_9999_24k_buy", "vang_9999_24k_sell"]
-OUTPUT_FILE = "gold_history.csv"
+def _output_path() -> Path:
+    if Path.home().name == "frank":
+        out_dir = Path("/home/frank/.openclaw/workspace")
+    else:
+        out_dir = Path(__file__).parent / "outputs"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir / "gold_history.csv"
 
 
 def fetch_ticker(ticker: str) -> list[dict]:
-    url = f"https://api2.simplize.vn/api/historical/prices/chart?ticker={ticker}&period=1y"
+    url = HISTORY_CHART_URL.format(ticker=ticker)
     response = requests.get(url, headers=HEADERS, timeout=30)
     response.raise_for_status()
     payload = response.json()
@@ -57,7 +54,7 @@ def filter_dates(rows: list[dict], start: str = "2025-01-01") -> list[dict]:
     return [r for r in rows if r["date"] >= start]
 
 
-def write_csv(rows: list[dict], filename: str = OUTPUT_FILE) -> None:
+def write_csv(rows: list[dict], filename: Path) -> None:
     rows_sorted = sorted(rows, key=lambda r: r["date"])
     with open(filename, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS, extrasaction="ignore")
@@ -75,8 +72,9 @@ def main() -> None:
 
     merged = merge_series(series)
     filtered = filter_dates(merged)
-    write_csv(filtered)
-    print(f"Wrote {len(filtered)} rows to {OUTPUT_FILE}")
+    output = _output_path()
+    write_csv(filtered, output)
+    print(f"Wrote {len(filtered)} rows to {output}")
 
 
 if __name__ == "__main__":

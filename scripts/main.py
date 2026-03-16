@@ -5,12 +5,8 @@ from datetime import datetime
 
 import requests
 
+from constants import API_URL, HEADERS, LOCAL_OUTPUT_DIR, PI_OUTPUT_DIR
 from schemas import GoldPriceReport, GoldType, PriceEntry, Snapshot
-
-API_URL = "https://api2.simplize.vn/api/company/commodity/gold/price"
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; gold-price-bot/1.0)"}
-LOCAL_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "outputs")
-PI_OUTPUT_DIR = "/home/frank/.openclaw/workspace"
 
 
 def get_output_dir() -> str:
