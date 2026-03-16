@@ -16,4 +16,4 @@ TICKERS = {
 
 CSV_COLUMNS = ["date", "vang_mieng_sjc_buy", "vang_mieng_sjc_sell", "vang_9999_24k_buy", "vang_9999_24k_sell"]
 LOCAL_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "outputs")
-PI_OUTPUT_DIR = "/home/frank/.openclaw/workspace"
+PI_OUTPUT_DIR = "/home/frank/.openclaw/workspace/gold"
