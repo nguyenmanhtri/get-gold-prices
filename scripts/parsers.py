@@ -2,9 +2,10 @@
 HTML parsers and price normalization for gold price sources.
 """
 import re
-from enum import Enum
 
 from bs4 import BeautifulSoup
+
+from schemas import GoldType
 
 
 HEADERS = {
@@ -13,11 +14,6 @@ HEADERS = {
 }
 
 PRICE_PATTERN = re.compile(r"\b\d{1,3}(?:[.,]\d{3})+\b")
-
-
-class GoldType(Enum):
-    SJC_MIENG = "vang_mieng_sjc"
-    VANG_9999 = "vang_9999_24k"
 
 
 def categorize(gold_type_str: str) -> GoldType | None:

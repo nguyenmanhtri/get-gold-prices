@@ -1,4 +1,10 @@
+from enum import Enum
 from typing import TypedDict
+
+
+class GoldType(Enum):
+    SJC_MIENG = "vang_mieng_sjc"
+    VANG_9999 = "vang_9999_24k"
 
 
 class PriceEntry(TypedDict):

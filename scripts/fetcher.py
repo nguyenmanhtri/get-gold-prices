@@ -5,49 +5,15 @@ from datetime import date
 
 import requests
 
-from parsers import (
-    HEADERS,
-    normalize_prices,
-    parse_cafef,
-    parse_sjc,
-    parse_generic,
-)
+from parsers import HEADERS, normalize_prices
 from schemas import PriceEntry
+from constants import HISTORICAL_SOURCES, SOURCES
 
 
 def fetch_html(url: str) -> str:
     response = requests.get(url, headers=HEADERS, timeout=30)
     response.raise_for_status()
     return response.text
-
-
-def webgia_url(d: date) -> str:
-    return f"https://webgia.com/gia-vang/sjc/{d.strftime('%d-%m-%Y')}.html"
-
-
-def h24_url(d: date) -> str:
-    return f"https://www.24h.com.vn/gia-vang-hom-nay-c425.html?ngaythang={d.strftime('%Y-%m-%d')}"
-
-
-# Sources with known date-parameterized URL patterns.
-HISTORICAL_SOURCES = [
-    (webgia_url, parse_generic),
-    (h24_url, parse_generic),
-]
-
-# Full source list for today's multi-source fallback (static URLs, no date param).
-SOURCES = [
-    ("https://cafef.vn/du-lieu/gia-vang-hom-nay/trong-nuoc.chn", parse_cafef),
-    ("https://sjc.com.vn/gia-vang-online",                        parse_sjc),
-    ("https://www.pnj.com.vn/site/gia-vang",                      parse_generic),
-    ("https://doji.vn/gia-vang",                                   parse_generic),
-    ("https://webgia.com/gia-vang/sjc/",                           parse_generic),
-    ("https://simplize.vn/gia-vang",                               parse_generic),
-    ("https://baomoi.com/tien-ich-gia-vang.epi",                   parse_generic),
-    ("https://www.24h.com.vn/gia-vang-hom-nay-c425.html",         parse_generic),
-    ("https://giavang.org",                                        parse_generic),
-    ("https://vneconomy.vn/gia-vang.htm",                          parse_generic),
-]
 
 
 def one_year_ago(today: date) -> date:
@@ -66,16 +32,29 @@ def to_price_dict(normalized: list[dict]) -> dict[str, PriceEntry]:
     }
 
 
+def scale_prices(normalized: list[dict], multiplier: int) -> list[dict]:
+    """Multiply buy/sell prices by multiplier to normalise to VND per lượng."""
+    return [
+        {**e,
+         "buy_price":  e["buy_price"]  * multiplier if e["buy_price"]  is not None else None,
+         "sell_price": e["sell_price"] * multiplier if e["sell_price"] is not None else None}
+        for e in normalized
+    ]
+
+
 def _fetch_historical(d: date) -> tuple[dict[str, PriceEntry] | None, str | None]:
     """Try each date-parameterized source in order."""
-    for url_fn, parser in HISTORICAL_SOURCES:
+    for url_fn, parser, multiplier in HISTORICAL_SOURCES:
         url = url_fn(d)
         print(f"Trying {url} ...")
         try:
             html = fetch_html(url)
             raw = parser(html)
             if raw:
-                prices = to_price_dict(normalize_prices(raw))
+                normalized = normalize_prices(raw)
+                if multiplier != 1:
+                    normalized = scale_prices(normalized, multiplier)
+                prices = to_price_dict(normalized)
                 if prices:
                     print(f"  -> Got {len(prices)} entries")
                     return prices, url
@@ -91,13 +70,16 @@ def _fetch_today() -> tuple[dict[str, PriceEntry] | None, str | None]:
     if prices:
         return prices, source
 
-    for url, parser in SOURCES:
+    for url, parser, multiplier in SOURCES:
         print(f"Trying {url} ...")
         try:
             html = fetch_html(url)
             raw = parser(html)
             if raw:
-                result = to_price_dict(normalize_prices(raw))
+                normalized = normalize_prices(raw)
+                if multiplier != 1:
+                    normalized = scale_prices(normalized, multiplier)
+                result = to_price_dict(normalized)
                 if result:
                     print(f"  -> Got {len(result)} entries")
                     return result, url
