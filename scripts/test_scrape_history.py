@@ -25,12 +25,10 @@ def test_fetch_ticker_empty_data_returns_empty_list():
 
 
 def test_fetch_ticker_raises_on_api_error():
+    import pytest
     m = Mock()
     m.raise_for_status.return_value = None
     m.json.return_value = {"status": 500, "message": "Có lỗi xảy ra"}
     with patch("scrape_history.requests.get", return_value=m):
-        try:
+        with pytest.raises(RuntimeError, match="Có lỗi xảy ra"):
             fetch_ticker("SJC:M1L:BUY")
-            assert False, "expected RuntimeError"
-        except RuntimeError as e:
-            assert "Có lỗi xảy ra" in str(e)

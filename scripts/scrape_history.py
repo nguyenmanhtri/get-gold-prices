@@ -40,7 +40,7 @@ def fetch_ticker(ticker: str) -> list[tuple[str, float]]:
         return []
     results = []
     for row in data:
-        ts, close = row[0], row[4]
+        ts, close = row[0], row[4]  # row: [timestamp, open, high, low, close, volume]
         date_str = datetime.fromtimestamp(ts, tz=TZ_VN).strftime("%Y-%m-%d")
         results.append((date_str, close))
     return results
