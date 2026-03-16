@@ -22,6 +22,9 @@ TICKERS = {
 }
 
 
+COLUMNS = ["date", "sjc_bar_buy", "sjc_bar_sell", "sjc_ring_buy", "sjc_ring_sell"]
+
+
 def fetch_ticker(ticker: str) -> list[tuple[str, float]]:
     """Return list of (YYYY-MM-DD, close_price) for *ticker*, all-time."""
     response = requests.get(
@@ -44,3 +47,30 @@ def fetch_ticker(ticker: str) -> list[tuple[str, float]]:
         date_str = datetime.fromtimestamp(ts, tz=TZ_VN).strftime("%Y-%m-%d")
         results.append((date_str, close))
     return results
+
+
+def merge_tickers(
+    ticker_data: dict[str, list[tuple[str, float]]]
+) -> list[dict]:
+    """Merge per-ticker lists into one row per date, sorted ascending."""
+    merged: dict[str, dict] = {}
+    for col, pairs in ticker_data.items():
+        for date_str, close in pairs:
+            row = merged.setdefault(date_str, {
+                "date": date_str,
+                "sjc_bar_buy": None,
+                "sjc_bar_sell": None,
+                "sjc_ring_buy": None,
+                "sjc_ring_sell": None,
+            })
+            row[col] = close
+    return sorted(merged.values(), key=lambda r: r["date"])
+
+
+def write_csv(rows: list[dict], dest) -> None:
+    """Write merged rows to *dest* (file path or file-like object)."""
+    writer = csv.DictWriter(dest, fieldnames=COLUMNS, extrasaction="ignore",
+                            lineterminator="\n")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({k: ("" if row[k] is None else row[k]) for k in COLUMNS})
