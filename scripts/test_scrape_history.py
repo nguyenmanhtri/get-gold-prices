@@ -2,7 +2,7 @@
 import io
 import pytest
 from unittest.mock import patch, Mock
-from scrape_history import fetch_ticker, merge_tickers, write_csv
+from scrape_history import fetch_ticker, merge_tickers, write_csv, main
 
 
 def _mock_response(data):
@@ -85,10 +85,6 @@ def test_write_csv_produces_correct_output():
     assert lines[0] == "date,sjc_bar_buy,sjc_bar_sell,sjc_ring_buy,sjc_ring_sell"
     assert lines[1] == "2012-01-01,40800000.0,45100000.0,,"
     assert lines[2] == "2024-03-01,69250000.0,71000000.0,69250000.0,71000000.0"
-
-
-import tempfile, os
-from scrape_history import main
 
 
 def test_main_writes_csv(tmp_path):
