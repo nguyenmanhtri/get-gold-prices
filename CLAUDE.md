@@ -13,24 +13,23 @@ Note: `scripts/setup.sh` is only for deploying to the Raspberry Pi 5. It is not 
 
 ## Architecture
 
-This is an OpenClaw skill (`SKILL.md`) that scrapes Vietnamese gold prices from multiple websites and outputs a JSON report. All Python code lives in `scripts/`.
+This is an OpenClaw skill (`SKILL.md`) that fetches Vietnamese gold prices from the simplize.vn API and outputs a JSON report. All Python code lives in `scripts/`.
 
 **Data flow:**
-1. `main.py` — entry point; fetches prices for today, 7 days ago, and 1 year ago, then writes `YYYYMMDD_gold_prices.json`
-2. `fetcher.py` — date-aware HTTP fetching with fallback logic:
-   - Today: tries `HISTORICAL_SOURCES` (date-parameterized URLs) first, falls back to full `SOURCES` list
-   - Past dates: tries `HISTORICAL_SOURCES` only
-3. `constants.py` — source registry: `HISTORICAL_SOURCES` (date-parameterized) and `SOURCES` (static URLs for today). Each entry is `(url_or_url_fn, parser_fn, multiplier)` where `multiplier` normalizes prices to VND per lượng
-4. `parsers.py` — BeautifulSoup parsers (`parse_cafef`, `parse_sjc`, `parse_generic`) plus `normalize_prices()` which deduplicates and maps raw strings to `GoldType` enum values
-5. `compare.py` — computes buy/sell diffs and percentage changes between today and historical snapshots
-6. `schemas.py` — TypedDict types for the full data model: `GoldPriceReport`, `Snapshot`, `PriceEntry`, `ComparisonDelta`, `GoldTypeComparison`
-7. `scrape_history.py` — standalone utility to pull all-time historical price series from the simplize.vn API (OHLCV format, indexed by ticker like `SJC:M1L:BUY`)
+1. `main.py` — entry point; fetches today's prices from the API, loads historical snapshots from `gold_history.csv`, computes comparisons, and writes `YYYYMMDD_gold_prices.json`. Key functions:
+   - `fetch_prices()` — calls the simplize.vn live price API; returns `(prices, source)` or `(None, None)` on failure
+   - `load_history(csv_path)` — reads `gold_history.csv` into a `dict` keyed by date string
+   - `csv_row_to_snapshot(row, date_str, csv_path)` — converts a CSV row to a `Snapshot`; returns a null-prices snapshot if the date is missing
+   - `compute_delta(today_entry, past_entry)` — computes buy/sell diffs and percentages between two `PriceEntry` values
+2. `constants.py` — API URLs (`API_URL`, `HISTORY_CHART_URL`), request headers, ticker symbols (`TICKERS`), CSV column names (`CSV_COLUMNS`), and output directory paths
+3. `schemas.py` — TypedDict types for the full data model: `GoldPriceReport`, `Snapshot`, `PriceEntry`, `ComparisonDelta`, `GoldTypeComparison`
+4. `_scrape_history.py` — standalone utility to pull historical price series from the simplize.vn chart API (OHLCV format) and write `gold_history.csv`. Run manually to refresh the historical dataset.
 
 **Gold types** (`GoldType` enum in `schemas.py`):
-- `vang_mieng_sjc` — SJC gold bars
-- `vang_9999_24k` — 24K/9999 gold rings
+- `vang_mieng_sjc` — SJC gold bars (ticker prefix `BTMC:BVV9999`)
+- `vang_9999_24k` — 24K/9999 gold rings (ticker prefix `BTMC:RTL9999`)
 
-**Unit normalization:** Sources report in different units; `multiplier` in the source registry converts everything to VND per lượng before storage. webgia.com uses per-chỉ (×10), 24h.com.vn historical pages use ngàn đồng/lượng (×1000).
+**Historical data:** `gold_history.csv` (in the output dir) is pre-built by `_scrape_history.py`. Columns: `date`, `vang_mieng_sjc_buy`, `vang_mieng_sjc_sell`, `vang_9999_24k_buy`, `vang_9999_24k_sell`. Prices are in VND per lượng.
 
 **Output schema:** The JSON report has three top-level keys: `generated_at`, `snapshots` (`today`/`7d_ago`/`1y_ago`), and `comparison` (per gold type, per time period: diffs and percentages). If today's fetch fails entirely, `comparison` is `null` and the process exits with code 1.
 
