@@ -1,51 +1,76 @@
-"""
-Gold Price Scraper — fetches today, 7 days ago, and 1 year ago in one run.
-Writes a single YYYYMMDD_gold_prices.json with prices and comparisons.
-"""
 import json
+import os
 import sys
-from datetime import date, datetime, timedelta
+from datetime import datetime
 
-from compare import build_comparison
-from fetcher import fetch_for_date, one_year_ago
-from schemas import GoldPriceReport, Snapshot
+import requests
+
+from schemas import GoldPriceReport, GoldType, PriceEntry, Snapshot
+
+API_URL = "https://api2.simplize.vn/api/company/commodity/gold/price"
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; gold-price-bot/1.0)"}
+LOCAL_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "outputs")
+PI_OUTPUT_DIR = "/home/frank/.openclaw/workspace"
 
 
-def make_snapshot(d: date) -> Snapshot:
-    prices, source = fetch_for_date(d)
-    return {"date": d.strftime("%Y-%m-%d"), "source": source, "prices": prices}
+def get_output_dir() -> str:
+    if os.path.isdir(PI_OUTPUT_DIR):
+        return PI_OUTPUT_DIR
+    os.makedirs(LOCAL_OUTPUT_DIR, exist_ok=True)
+    return LOCAL_OUTPUT_DIR
 
 
-def save_to_json(report: GoldPriceReport, filename: str) -> None:
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(report, f, ensure_ascii=False, indent=2)
-    print(f"Saved report to {filename}")
+def fetch_prices() -> tuple[dict[str, PriceEntry] | None, str | None]:
+    resp = requests.get(API_URL, params={"period": "1D"}, headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    items = resp.json()["data"].get("items", [])
+
+    prices: dict[str, PriceEntry] = {}
+
+    # vang_mieng_sjc: prefer SJC MIENG, fall back to any MIENG
+    mieng = [i for i in items if i.get("productType") == "MIENG"]
+    item = next((i for i in mieng if i.get("exchange") == "SJC"), mieng[0] if mieng else None)
+    if item:
+        prices[GoldType.SJC_MIENG.value] = {
+            "buy": int(item["priceBuy"]),
+            "sell": int(item["priceSell"]),
+        }
+
+    # vang_9999_24k: NHAN ring, 24K
+    nhan = [i for i in items if i.get("productType") == "NHAN" and i.get("karatType") == "24K"]
+    if nhan:
+        prices[GoldType.VANG_9999.value] = {
+            "buy": int(nhan[0]["priceBuy"]),
+            "sell": int(nhan[0]["priceSell"]),
+        }
+
+    source = API_URL if prices else None
+    return (prices if prices else None, source)
 
 
 def main() -> None:
-    today = date.today()
-    d7 = today - timedelta(days=7)
-    d1y = one_year_ago(today)
+    now = datetime.now()
+    prices, source = fetch_prices()
 
-    print(f"Fetching prices for: today={today}, 7d_ago={d7}, 1y_ago={d1y}")
-
-    today_snap = make_snapshot(today)
-    d7_snap = make_snapshot(d7)
-    d1y_snap = make_snapshot(d1y)
-
-    comparison = build_comparison(today_snap, d7_snap, d1y_snap)
-
+    snapshot: Snapshot = {
+        "date": now.strftime("%Y-%m-%d"),
+        "source": source,
+        "prices": prices,
+    }
     report: GoldPriceReport = {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "snapshots": {"today": today_snap, "7d_ago": d7_snap, "1y_ago": d1y_snap},
-        "comparison": comparison,
+        "generated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "snapshots": {"today": snapshot},
+        "comparison": None,
     }
 
-    filename = today.strftime("%Y%m%d") + "_gold_prices.json"
-    save_to_json(report, filename)
+    filename = now.strftime("%Y%m%d") + "_gold_prices.json"
+    output_path = os.path.join(get_output_dir(), filename)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+    print(f"Saved report to {output_path}")
 
-    if today_snap["prices"] is None:
-        print("Error: today's fetch failed — no prices retrieved from any source")
+    if prices is None:
+        print("Error: no prices retrieved from API")
         sys.exit(1)
 
 
