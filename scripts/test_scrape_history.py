@@ -35,9 +35,6 @@ def test_fetch_ticker_raises_on_api_error():
             fetch_ticker("SJC:M1L:BUY")
 
 
-COLUMNS = ["sjc_bar_buy", "sjc_bar_sell", "sjc_ring_buy", "sjc_ring_sell"]
-
-
 def test_merge_tickers_combines_by_date():
     ticker_data = {
         "sjc_bar_buy":  [("2012-01-01", 4.08e7), ("2012-02-01", 4.50e7)],

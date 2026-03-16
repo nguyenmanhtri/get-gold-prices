@@ -68,7 +68,7 @@ def merge_tickers(
 
 
 def write_csv(rows: list[dict], dest) -> None:
-    """Write merged rows to *dest* (file path or file-like object)."""
+    """Write merged rows to *dest* (a writable file-like object)."""
     writer = csv.DictWriter(dest, fieldnames=COLUMNS, extrasaction="ignore",
                             lineterminator="\n")
     writer.writeheader()
