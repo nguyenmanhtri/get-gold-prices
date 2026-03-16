@@ -13,6 +13,7 @@ Run the setup script to ensure dependencies are installed. This only
 installs on the first run; subsequent runs are instant.
 
 \`\`\`bash
+chmod +x <skill-path>/scripts/setup.sh
 bash <skill-path>/scripts/setup.sh
 \`\`\`
 
