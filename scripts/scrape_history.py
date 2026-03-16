@@ -74,3 +74,25 @@ def write_csv(rows: list[dict], dest) -> None:
     writer.writeheader()
     for row in rows:
         writer.writerow({k: ("" if row[k] is None else row[k]) for k in COLUMNS})
+
+
+def main(out_path: Path | None = None) -> None:
+    if out_path is None:
+        out_path = Path(__file__).parent / "gold_history.csv"
+
+    ticker_data = {}
+    for col, ticker in TICKERS.items():
+        pairs = fetch_ticker(ticker)
+        ticker_data[col] = pairs
+        print(f"  {ticker}: {len(pairs)} rows"
+              + (f" ({pairs[0][0]} – {pairs[-1][0]})" if pairs else ""))
+
+    rows = merge_tickers(ticker_data)
+    with open(out_path, "w", newline="") as f:
+        write_csv(rows, f)
+
+    print(f"\nWrote {len(rows)} rows → {out_path}")
+
+
+if __name__ == "__main__":
+    main()

@@ -85,3 +85,32 @@ def test_write_csv_produces_correct_output():
     assert lines[0] == "date,sjc_bar_buy,sjc_bar_sell,sjc_ring_buy,sjc_ring_sell"
     assert lines[1] == "2012-01-01,40800000.0,45100000.0,,"
     assert lines[2] == "2024-03-01,69250000.0,71000000.0,69250000.0,71000000.0"
+
+
+import tempfile, os
+from scrape_history import main
+
+
+def test_main_writes_csv(tmp_path):
+    bar_data   = [[1325350800, 4.08e7, 4.51e7, 4.08e7, 4.51e7, None]]
+    ring_data  = []
+
+    side_effects = {
+        "SJC:M1L:BUY":   bar_data,
+        "SJC:M1L:SELL":  bar_data,
+        "SJC:T9999:BUY": ring_data,
+        "SJC:T9999:SELL": ring_data,
+    }
+
+    def fake_get(url, params, headers, timeout):
+        ticker = params["ticker"]
+        return _mock_response(side_effects[ticker])
+
+    out_path = tmp_path / "out.csv"
+    with patch("scrape_history.requests.get", side_effect=fake_get):
+        main(out_path=out_path)
+
+    lines = out_path.read_text().splitlines()
+    assert lines[0] == "date,sjc_bar_buy,sjc_bar_sell,sjc_ring_buy,sjc_ring_sell"
+    assert len(lines) == 2  # header + 1 data row (bar_data and ring_data share same timestamp → one merged row)
+    assert "2012-01-01" in lines[1]
